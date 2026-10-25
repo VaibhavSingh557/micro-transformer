@@ -167,4 +167,92 @@ class MicroTransformer:
         gP = np.zeros_like(p["P"])
         gP[:T] = dX
         g["E"], g["P"] = gE, gP
-        return los
+        return loss, g
+
+    def _adam_step(self, grads, lr, beta1=0.9, beta2=0.999, eps=1e-8) -> None:
+        self._t += 1
+        for name, grad in grads.items():
+            m = beta1 * self._m[name] + (1 - beta1) * grad
+            v = beta2 * self._v[name] + (1 - beta2) * grad ** 2
+            self._m[name], self._v[name] = m, v
+            m_hat = m / (1 - beta1 ** self._t)
+            v_hat = v / (1 - beta2 ** self._t)
+            self.params[name] -= lr * m_hat / (np.sqrt(v_hat) + eps)
+
+    # ----------------------------------------------------------------- public
+    def train(self, sentences: list[str], epochs: int = 600, lr: float = 0.01) -> list[float]:
+        seqs = []
+        for s in sentences:
+            ids, _ = self.tokenizer.encode(s)
+            ids = ids[: self.cfg.max_len]
+            if len(ids) >= 2:
+                seqs.append(ids)
+        if not seqs:
+            raise ValueError("No sentence has at least two tokens to train on.")
+
+        for _ in range(epochs):
+            total = 0.0
+            for ids in seqs:
+                loss, grads = self._loss_grads(ids[:-1], ids[1:])
+                self._adam_step(grads, lr)
+                total += loss
+            self.loss_history.append(total / len(seqs))
+        return self.loss_history
+
+    def num_params(self) -> int:
+        return int(sum(v.size for v in self.params.values()))
+
+    def generate(self, prompt: str, max_new_tokens: int = 6, temperature: float = 0.0, seed: int = 0) -> dict:
+        t0 = time.perf_counter()
+        cfg = self.cfg
+        max_new_tokens = max(1, min(int(max_new_tokens), cfg.max_len - 1))
+
+        ids, _ = self.tokenizer.encode(prompt)
+        if not ids:
+            raise ValueError("Prompt contains no words.")
+        ctx = ids[-(cfg.max_len - max_new_tokens):]
+        context_tokens = list(ctx)
+
+        rng = np.random.default_rng(seed)
+        generated: list[int] = []
+        first_attn = None
+        top_preds: list[dict] = []
+
+        for step in range(max_new_tokens):
+            logits, cache = self._forward(ctx)
+            if first_attn is None:
+                first_attn = cache["A"]
+
+            last = logits[-1].copy()
+            last[self.tokenizer.UNK_ID] = -np.inf  # never generate <unk>
+
+            if step == 0:
+                probs0 = _softmax(last)
+                for idx in np.argsort(probs0)[::-1][:5]:
+                    top_preds.append({"token": self.tokenizer.piece(int(idx)),
+                                      "prob": round(float(probs0[idx]) * 100, 2)})
+
+            if temperature <= 0:
+                nxt = int(np.argmax(last))
+            else:
+                probs = _softmax(last / temperature)
+                nxt = int(rng.choice(len(probs), p=probs))
+            ctx.append(nxt)
+            generated.append(nxt)
+
+        return {
+            "prompt": prompt,
+            "tokens": [self.tokenizer.piece(i) for i in context_tokens],
+            "input_ids": context_tokens,
+            "attention": first_attn.tolist(),  # (heads, T, T), first layer
+            "completion": self.tokenizer.decode(generated),
+            "top_predictions": top_preds,
+            "telemetry": {
+                "num_params": self.num_params(),
+                "vocab_size": len(self.tokenizer.vocab),
+                "num_heads": cfg.n_heads,
+                "train_loss_start": round(self.loss_history[0], 4) if self.loss_history else None,
+                "train_loss_final": round(self.loss_history[-1], 4) if self.loss_history else None,
+                "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
+            },
+        }
