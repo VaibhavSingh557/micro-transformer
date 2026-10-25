@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Micro-Transformer · Attention Explorer</title>
+<style>
+  :root { --bg:#0b0d12; --card:#121620; --line:#252c3d; --gold:#ffd700; --cyan:#38bdf8;
+          --green:#34d399; --text:#f1f5f9; --muted:#94a3b8; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { background: var(--bg); color: var(--text); padding: 16px; }
+  .wrap { max-width: 1150px; margin: 0 auto; display: grid; gap: 14px; }
+  header, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  h1 { color: var(--gold); font-size: 1.05rem; letter-spacing: .5px; }
+  h2 { color: var(--gold); font-size: .85rem; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .tele { color: var(--cyan); font-family: ui-monospace, monospace; font-size: .75rem; }
+  form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  label { display: grid; gap: 4px; font-size: .75rem; color: var(--muted); flex: 1 1 260px; }
+  input, select { background: #07090d; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: .85rem; width: 100%; }
+  button { background: rgba(255,215,0,.15); color: var(--gold); border: 1px solid var(--gold); border-radius: 6px; padding: 9px 16px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  canvas { width: 100%; height: auto; background: #07090d; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  .label { font-size: .75rem; color: var(--muted); margin: 10px 0 6px; }
+  .pill { display: inline-block; background: #07090d; border: 1px solid var(--cyan); color: var(--cyan); border-radius: 5px; padding: 3px 7px; margin: 3px; font: .75rem ui-monospace, monospace; }
+  .pill small { color: var(--muted); }
+  .gen { background: #07090d; border-left: 3px solid var(--green); padding: 9px; font: .85rem ui-monospace, monospace; border-radius: 4px; }
+  .gen b { color: var(--green); font-weight: 600; }
+  .bar { margin-bottom: 8px; font: .78rem ui-monospace, monospace; }
+  .bar-row { display: flex; justify-content: space-between; }
+  .bar-bg { background: #07090d; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 3px; }
+  .bar-fg { background: var(--gold); height: 100%; }
+  .err { color: #f87171; }
+  footer { color: var(--muted); font-size: .72rem; text-align: center; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Micro-Transformer · Attention Explorer</h1>
+    <div id="tele" class="tele">loading…</div>
+  </header>
+
+  <section class="card">
+    <form id="form">
+      <label>Prompt
+        <input id="prompt" maxlength="500" value="neural attention layers" autocomplete="off">
+      </label>
+      <label style="flex: 0 0 150px;">Attention head
+        <select id="head"></select>
+      </label>
+      <button id="run" type="submit">Run forward pass</button>
+    </form>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1 · Causal self-attention (layer 1)</h2>
+      <canvas
